@@ -1,22 +1,28 @@
 ﻿using System.Text.Json;
 using AlexGoodsChecker;
 
-List<Product> products = new();
-using (StreamReader reader = new StreamReader("appsettings.json"))  
-{  
-    string json = reader.ReadToEnd();  
-    products = JsonSerializer.Deserialize<List<Product>>(json);  
-}
+using StreamReader reader = new StreamReader("appsettings.json");
+string json = reader.ReadToEnd();
+List<Product> products = JsonSerializer.Deserialize<List<Product>>(json);
 
-foreach (Product product in products)
+int count = 0;
+using HttpClient client = new();
+while (true)
 {
-    Console.WriteLine("--------------------------------------------------");
-    Console.WriteLine(product.Id);
-    Console.WriteLine(product.MarketPlace);
-    Console.WriteLine(product.Url);
+    count++;
+    if (products != null)
+        foreach (Product product in products)
+        {
+            if (product != null)
+            {
+                if (GetRequester.CheckProductAvailability(product, client))
+                {
+                    Console.WriteLine($"Item with code {product.Id} appeared in the store {product.MarketPlace}");
+                }
+            }
+        }
+
+    Console.WriteLine("");
+    Console.WriteLine($"The application is working correctly. A total of {count} requests were made per day.");
+    Thread.Sleep(500000);
 }
-Console.WriteLine("result");
-//File.WriteAllText("C:\\E\\Програмирование\\Amazon1.txt", result);
-Console.ReadKey();
-
-
