@@ -17,30 +17,27 @@ public class AlexTelegramBot
     private const string StartMessage = "Goods monitoring started";
     private const double MonitoringInterval = 500000;
 
-
     private readonly List<Product> _products;
     private readonly TelegramBotClient _botClient;
     private readonly List<long> _chatIdList;
+    private readonly HttpClient _client;
 
-    private HttpClient _client;
     private int _count;
 
-    public AlexTelegramBot()
+    public AlexTelegramBot(HttpClient client)
     {
         _products = Deserialize() ?? new List<Product>();
         _botClient = new TelegramBotClient(TelegramBotToken);
         _botClient.StartReceiving(Update, Error);
         _chatIdList = new List<long>();
+        _client = client;
     }
 
     public void Start()
     {
-        using (_client = new HttpClient())
-        {
-            Timer timer = new(MonitoringInterval);
-            timer.Elapsed += Start_Monitoring;
-            timer.Start();
-        }
+        Timer timer = new(MonitoringInterval);
+        timer.Elapsed += Start_Monitoring;
+        timer.Start();
     }
 
     private async Task Update(ITelegramBotClient botClient, Update update, CancellationToken token)
@@ -76,7 +73,7 @@ public class AlexTelegramBot
                 }
             }
         }
-        
+
         MakeMessageSending(string.Format(AppActivityMessage, _count));
     }
 

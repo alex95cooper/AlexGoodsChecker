@@ -1,6 +1,6 @@
 ﻿using AlexGoodsChecker;
 
-AlexTelegramBot bot = new();
+using HttpClient client = new();
+AlexTelegramBot bot = new(client);
 bot.Start();
 Console.ReadKey();
-
