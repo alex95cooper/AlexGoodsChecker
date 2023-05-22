@@ -1,18 +1,14 @@
-using System.Text.Json;
 using System.Timers;
 using Telegram.Bot;
-using Telegram.Bot.Types;
 using Timer = System.Timers.Timer;
+using AlexGoodsChecker.Extensions;
+using AlexGoodsChecker.Interfaces;
 
 namespace AlexGoodsChecker;
 
-public class AlexTelegramBot
+public class AlexTelegramBot : ITelegramBot
 {
-    private const string TelegramBotToken = "6065625282:AAEjYaSxmKLgq3GgWiwyNI2PnFFal8B6NPY";
-
-    private const string AppActivityMessage =
-        "The application is working correctly. A total of {0} requests were made today.";
-
+    private const string AppActivityMessage = "The application is working correctly. A total of {0} requests were made today.";
     private const string GoodsAvailabilityMessage = "Item with code {0} appeared in the store {1}.";
     private const string StartMessage = "Goods monitoring started";
     private const double MonitoringInterval = 500000;
@@ -20,16 +16,14 @@ public class AlexTelegramBot
 
     private readonly List<Product> _products;
     private readonly TelegramBotClient _botClient;
-    private readonly List<long> _chatIdList;
     private readonly HttpClient _client;
 
     private int _count;
 
-    public AlexTelegramBot(HttpClient client)
+    public AlexTelegramBot(List<Product> products, HttpClient client, string token)
     {
-        _products = Deserialize() ?? new List<Product>();
-        _botClient = new TelegramBotClient(TelegramBotToken);
-        _chatIdList = new List<long>();
+        _products = products ?? new List<Product>();
+        if (token != null) _botClient = new TelegramBotClient(token);
         _client = client;
     }
 
@@ -48,7 +42,8 @@ public class AlexTelegramBot
             _count++;
             foreach (var product in _products)
             {
-                if (GetRequester.CheckProductAvailability(product, _client))
+                string htmlText = _client.GetHttpText(product).Result;
+                if (GetRequester.CheckProductAvailability(product, htmlText))
                 {
                     _botClient?.SendTextMessageAsync(ChatId, string.Format(
                         GoodsAvailabilityMessage, product?.Id, product?.MarketPlace));
@@ -57,21 +52,5 @@ public class AlexTelegramBot
         }
 
         _botClient?.SendTextMessageAsync(ChatId, string.Format(AppActivityMessage, _count));
-    }
-
-    private static List<Product> Deserialize()
-    {
-        using StreamReader reader = new StreamReader("appsettings.json");
-        string json = reader.ReadToEnd();
-        return JsonSerializer.Deserialize<List<Product>>(json);
-    }
-
-    private void MakeMessageSending(string message)
-    {
-        if (_chatIdList == null) return;
-        foreach (long chatId in _chatIdList)
-        {
-            _botClient?.SendTextMessageAsync(chatId, message ?? string.Empty);
-        }
     }
 }

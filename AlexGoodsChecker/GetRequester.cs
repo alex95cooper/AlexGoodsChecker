@@ -13,20 +13,10 @@ public static class GetRequester
     private const string RozetkaHtmlTextPattern =
         "type=\"button\" class=\"button button--medium button--navy ng-star-inserted\">";
 
-    public static bool CheckProductAvailability(Product product, HttpClient client)
+    public static bool CheckProductAvailability(Product product, string htmlText)
     {
-        string htmlText = GetHttpText(product, client).Result;
         Regex regex = new Regex(SelectRegexPattern(product) ?? string.Empty);
         return htmlText != null && !regex.IsMatch(htmlText);
-    }
-
-    private static async Task<string> GetHttpText(Product product, HttpClient client)
-    {
-        if (product == null || client == null) return default;
-        string htmlText = product.MarketPlace == "Amazon"
-            ? await File.ReadAllTextAsync("Amazon.txt")
-            : await client.GetStringAsync(product.Url);
-        return htmlText;
     }
 
     private static string SelectRegexPattern(Product product)
@@ -35,7 +25,7 @@ public static class GetRequester
         {
             return string.Empty;
         }
-        
+
         return product.MarketPlace switch
         {
             "Amazon" => AmazonHtmlTextPattern,
