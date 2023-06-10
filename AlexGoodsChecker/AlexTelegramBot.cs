@@ -1,56 +1,43 @@
-using System.Timers;
 using Telegram.Bot;
-using Timer = System.Timers.Timer;
-using AlexGoodsChecker.Extensions;
 using AlexGoodsChecker.Interfaces;
 
 namespace AlexGoodsChecker;
 
 public class AlexTelegramBot : ITelegramBot
 {
+    private const string StartMessage = "Goods monitoring started";
     private const string AppActivityMessage = "The application is working correctly. A total of {0} requests were made today.";
     private const string GoodsAvailabilityMessage = "Item with code {0} appeared in the store {1}.";
-    private const string StartMessage = "Goods monitoring started";
-    private const double MonitoringInterval = 500000;
-    private const long ChatId = -872421566;
-
-    private readonly List<Product> _products;
+    private const string ErrorMessage = "Failed to get data from {0} website for product {1}";
+    
     private readonly TelegramBotClient _botClient;
-    private readonly HttpClient _client;
+    private readonly long _chatId;
 
-    private int _count;
-
-    public AlexTelegramBot(List<Product> products, HttpClient client, string token)
+    public AlexTelegramBot(string token, long chatId)
     {
-        _products = products ?? new List<Product>();
         if (token != null) _botClient = new TelegramBotClient(token);
-        _client = client;
+        _chatId = chatId;
     }
 
     public void Start()
     {
-        _botClient?.SendTextMessageAsync(ChatId, StartMessage);
-        Timer timer = new(MonitoringInterval);
-        timer.Elapsed += Start_Monitoring;
-        timer.Start();
+        _botClient?.SendTextMessageAsync(_chatId, StartMessage);
     }
-    
-    private void Start_Monitoring(object sender, ElapsedEventArgs e)
-    {
-        if (_products != null)
-        {
-            _count++;
-            foreach (var product in _products)
-            {
-                string htmlText = _client.GetHttpText(product).Result;
-                if (GetRequester.CheckProductAvailability(product, htmlText))
-                {
-                    _botClient?.SendTextMessageAsync(ChatId, string.Format(
-                        GoodsAvailabilityMessage, product?.Id, product?.MarketPlace));
-                }
-            }
-        }
 
-        _botClient?.SendTextMessageAsync(ChatId, string.Format(AppActivityMessage, _count));
+    public void NotifyAboutCorrectWork(int count)
+    {
+        _botClient?.SendTextMessageAsync(_chatId, string.Format(AppActivityMessage, count));
+    }
+
+    public void NotifyAboutProductAvailability(Product product)
+    {
+        _botClient?.SendTextMessageAsync(_chatId, string.Format(
+            GoodsAvailabilityMessage, product?.Id, product?.MarketPlace));
+    }
+
+    public void NotifyAboutInvalidPage(Product product)
+    {
+        _botClient?.SendTextMessageAsync(_chatId, string.Format(
+            ErrorMessage, product?.MarketPlace, product?.Id));
     }
 }
