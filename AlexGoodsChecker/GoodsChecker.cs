@@ -7,86 +7,81 @@ namespace AlexGoodsChecker;
 
 public class GoodsChecker : IGoodsChecker
 {
-    private const string AmazonHtmlTextPattern =
+    private const string AmazonProductUnavailablePattern =
         "<span class=\"a-color-price a-text-bold\">Currently unavailable.</span>";
 
-    private const string MakeUpHtmlTextPattern =
+    private const string MakeUpProductUnavailablePattern =
         "<div class=\"product-item__status red\" id=\"product_enabled\">Nu este disponibil</div>";
 
-    private const string RozetkaHtmlTextPattern =
+    private const string RozetkaProductUnavailablePattern =
         "type=\"button\" class=\"button button--medium button--navy ng-star-inserted\">";
 
     private const double MonitoringInterval = 500000;
 
     private readonly ITelegramBot _bot;
     private readonly List<Product> _products;
-    private List<RetriesItem> _retriesItems;
-    private readonly HttpClient _client;
+    private readonly List<RetriesItem> _retriesItems;
 
     private int _count;
 
-    public GoodsChecker(List<Product> products, HttpClient client, ITelegramBot bot)
+    public GoodsChecker(List<Product> products, ITelegramBot bot)
     {
+        _bot = EnsureBotNotNull(bot);
+        _retriesItems = new List<RetriesItem>();
         _products = products ?? new List<Product>();
-        _client = client;
-        _bot = bot;
     }
 
     public void Start()
     {
-        _bot?.Start();
+        _bot.Start();
         Timer timer = new(MonitoringInterval);
-        timer.Elapsed += Start_Monitoring;
-        timer.Elapsed += Start_Retries;
+        timer.Elapsed += MonitorGoods;
+        timer.Elapsed += MakeRetries;
         timer.Start();
     }
 
-    private void Start_Retries(object sender, ElapsedEventArgs e)
+    private void MakeRetries(object sender, ElapsedEventArgs e)
     {
-        if (_retriesItems != null && _retriesItems.Count > 0)
+        if (_retriesItems.Count > 0)
         {
+            using HttpClient client = new();
             foreach (var item in _retriesItems)
             {
-                item!.RetriesCount++;
+                item.RetriesCount++;
                 if (item.RetriesCount < 6)
                 {
-                    MakeRetry(item);
+                    MakeRetry(item, client);
                 }
                 else
                 {
-                    _bot?.NotifyAboutInvalidPage(item.Product);
-                    _retriesItems?.Remove(item);
+                    _bot.NotifyAboutInvalidPage(item.Product);
+                    _retriesItems.Remove(item);
                 }
             }
         }
     }
 
-    private void Start_Monitoring(object sender, ElapsedEventArgs e)
+    private void MonitorGoods(object sender, ElapsedEventArgs e)
     {
-        _count++;
-        foreach (var product in _products!)
+        if (_products.Count > 0)
         {
-            HttpResponseMessage response = _client?.GetAsync(product?.Url).Result;
-            if (CheckProductIsValid(product, response))
+            using HttpClient client = new();
+            foreach (var product in _products)
             {
-                string htmlText = response?.Content.ReadAsStringAsync().Result;
-                if (CheckProductAvailability(product, htmlText))
-                {
-                    _bot?.NotifyAboutProductAvailability(product);
-                }
+                MonitorGood(product, client);
             }
         }
-
-        _bot?.NotifyAboutCorrectWork(_count);
+        
+        _count++;
+        _bot.NotifyAboutCorrectWork(_count);
     }
 
     private bool CheckProductIsValid(Product product, HttpResponseMessage response)
     {
-        if (response is {IsSuccessStatusCode: false})
+        if (response.IsSuccessStatusCode == false)
         {
-            _retriesItems = new();
-            _retriesItems?.Add(new() {Product = product, RetriesCount = 0, FirstInvalidResponse = response});
-            _products?.Remove(product);
+            _retriesItems.Add(new RetriesItem {Product = product, RetriesCount = 0, FirstInvalidResponse = response});
+            _products.Remove(product);
             return false;
         }
 
@@ -95,35 +90,48 @@ public class GoodsChecker : IGoodsChecker
 
     private static bool CheckProductAvailability(Product product, string htmlText)
     {
-        Regex regex = new Regex(SelectRegexPattern(product) ?? string.Empty);
-        return htmlText != null && !regex.IsMatch(htmlText);
+        Regex regex = new Regex(SelectRegexPattern(product));
+        return !regex.IsMatch(htmlText);
     }
 
     private static string SelectRegexPattern(Product product)
     {
-        if (product == null)
-        {
-            return string.Empty;
-        }
-
         return product.MarketPlace switch
         {
-            "Amazon" => AmazonHtmlTextPattern,
-            "Rozetka" => RozetkaHtmlTextPattern,
-            "MakeUp" => MakeUpHtmlTextPattern,
+            "Amazon" => AmazonProductUnavailablePattern,
+            "Rozetka" => MakeUpProductUnavailablePattern,
+            "MakeUp" => RozetkaProductUnavailablePattern,
             _ => string.Empty
         };
     }
 
-    private void MakeRetry(RetriesItem item)
+    private void MonitorGood(Product product, HttpClient client)
     {
-        HttpResponseMessage response = item?.RetriesCount == 1
+        HttpResponseMessage response = client.GetAsync(product.Url).Result;
+        if (CheckProductIsValid(product, response))
+        {
+            string htmlText = response.Content.ReadAsStringAsync().Result;
+            if (CheckProductAvailability(product, htmlText))
+            {
+                _bot.NotifyAboutProductAvailability(product);
+            }
+        }
+    }
+
+    private void MakeRetry(RetriesItem item, HttpClient client)
+    {
+        HttpResponseMessage response = item.RetriesCount == 1
             ? item.FirstInvalidResponse
-            : _client?.GetAsync(item?.Product?.Url).Result;
+            : client.GetAsync(item.Product.Url).Result;
         if (PageValidator.CheckPageIsValid(response))
         {
-            _products?.Add(item?.Product);
-            _retriesItems?.Remove(item);
+            _products.Add(item.Product);
+            _retriesItems.Remove(item);
         }
+    }
+    
+    private static ITelegramBot EnsureBotNotNull(ITelegramBot bot)
+    {
+        return bot ?? throw new ArgumentNullException(nameof(bot));
     }
 }
